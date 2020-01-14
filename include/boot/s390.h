@@ -27,6 +27,7 @@
 
 #ifndef __ASSEMBLER__
 
+
 /*
  * Helper macro for exception table entries
  */
@@ -358,12 +359,14 @@ static __always_inline int is_zvm(void)
 	return cpuid.version == 0xff;
 }
 
+#ifndef _S390_TYPES_H
 /*
  * Vector register definition
  */
 typedef struct {
 	uint32_t u[4];
 } __vector128;
+#endif
 
 /*
  * Save vector registers
