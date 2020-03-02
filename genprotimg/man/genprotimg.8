@@ -1,0 +1,133 @@
+.\" Copyright 2020 IBM Corp.
+.\" s390-tools is free software; you can redistribute it and/or modify
+.\" it under the terms of the MIT license. See LICENSE for details.
+.\"
+.TH GENPROTIMG 8 "Feb. 2020" "s390-tools"
+.SH NAME
+genprotimg \- Create a Protected Virtualization image
+
+
+.SH SYNOPSIS
+.B genprotimg
+\fB\-c\fR \fIHOST_CERTIFICATE\fR
+\fB\-i\fR \fIVMLINUZ\fR
+[\fB\-r\fR \fIRAMDISK\fR]
+[\fB\-p\fR \fIPARMFILE\fR]
+\fB\-o\fR \fIOUTFILE\fR
+[\fIOPTION\fR]...
+
+.SH DESCRIPTION
+.B genprotimg
+is essentially a program that takes a kernel, key files, and optionally
+an initial ram filesystem, and optionally a file containing the kernel
+command line parameters and generates a single loadable image file.
+This created image file consists of a concatenation of a plain text boot
+loader, the encrypted components for kernel, initrd, and cmdline,
+and the integrity-protected PV header, containing metadata necessary
+for running the guest in PV mode.
+
+It's possible to use this image file as a kernel for zipl or for
+a direct kernel boot using QEMU. See the
+.BR zipl (5)
+man page for details on how to use zipl and the
+.BR qemu (1)
+man page for details on how to use qemu.
+
+
+.SH OPTIONS
+.TP
+.BR "\-h" " or " "\-\-help"
+Print usage information, then exit.
+
+.TP
+.BR "\-\-help-experimental"
+Print experimental usage information, then exit.
+
+.TP
+.BR "\-\-help-all"
+Print all usage information, then exit.
+
+.TP
+.BR "\-V" " or " "\-\-verbose"
+Provide more verbose output.
+
+.TP
+.BR "\-c <HOST CERTIFICATE>" " or " "\-\-host-certificate=<HOST CERTIFICATE>"
+Use the specified <HOST CERTIFICATE> as a host certificate. At least
+one host certificate must be specified.
+
+.TP
+.BR "\-o <OUTPUT FILE>" " or " "\-\-output=<OUTPUT FILE>"
+Use the specified <OUTPUT FILE> as the output file. Required.
+
+.TP
+.BR "\-i <VMLINUZ>" " or " "\-\-image=<VMLINUZ>"
+Use the Linux kernel image file <VMLINUZ>. Required.
+
+.TP
+.BR "\-r <RAMDISK>" " or " "\-\-ramdisk=<RAMDISK>"
+Use the ramdisk image <RAMDISK>. Optional.
+
+.TP
+.BR "\-p <PARMFILE>" " or " "\-\-parmfile=<PARMFILE>"
+Use the kernel command line stored in file <PARMFILE>. Optional.
+
+.TP
+.BR "\-\-header-key=<FILE>"
+Use the specified <FILE> as the AES 256-bit GCM customer root key that
+protects the PV header. Will be auto-generated if omitted.
+
+.TP
+.BR "\-\-comp-key=<FILE>"
+Specify the AES 256-bit XTS key to be used for encrypting the image
+components. Will be auto-generated if omitted.
+
+.TP
+.BR "\-\-no-cert-check"
+Do not require host certificate(s) to be valid.
+
+.TP
+.BR "\-v" " or " "\-\-version"
+Print version information, then exit.
+
+
+.SH EXAMPLE
+Scenario: prepare a Protected Virtualization image using the following
+parameters:
+.br
+  - the directory /boot is located on the boot device
+.br
+  - vmlinuz contains the raw binary Linux kernel image
+.br
+  - ramdisk.img contains a ramdisk image
+.br
+  - parmfile contains the kernel parameter line
+.br
+  - host_key.crt contains the public host certificate
+.br
+
+.RB "The respective " "genprotimg " "call reads:"
+.br
+
+  $ genprotimg -i vmlinuz -r ramdisk.img \\
+.br
+       -p parmfile --host-certificate host_key.crt \\
+.br
+       -o /boot/vmlinuz.pv
+.br
+
+
+.SH NOTES
+.IP \(em
+No ELF file can be used as Linux kernel image.
+.IP \(em
+If a key is omitted it will be in-memory auto-generated except for
+host certificates.
+.IP \(em
+Don't forget to re-run
+.BR zipl
+after updating a Protected Virtualization image.
+
+.SH SEE ALSO
+.BR zipl (5)
+.BR qemu (1)
