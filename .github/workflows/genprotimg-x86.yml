@@ -1,0 +1,251 @@
+name: Compile `genprotimg` for x86
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04, ubuntu-22.04]
+        compiler: [gcc, clang]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install packages
+      run: |
+        case "${{ matrix.os }}" in
+          ubuntu*)
+            sudo apt-get update -q -y
+            sudo apt-get install -y gcc-s390x-linux-gnu gcc-s390x-linux-gnu
+            sudo apt-get install -y libssl-dev libglib2.0-dev libcurl4-openssl-dev
+            sudo apt-get install -y bear
+            ;;
+          fedora*)
+            sudo dnf update -y
+            sudo dnf install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
+            sudo dnf install -y openssl-devel glib2-devel libcurl-devel
+            sudo dnf install -y bear
+            ;;
+        esac
+    - name: make
+      run: |
+        pushd genprotimg
+        # cross-compile boot loader
+        pushd boot
+        bear make all -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
+        popd
+        # compile genprotimg
+        pushd src
+        bear make all -j V=1 CC="${{ matrix.compiler }}" LINK="${{ matrix.compiler }}"
+        popd
+        popd
+    - uses: actions/cache@v2
+      id: restore-compile-commands
+      with:
+        path: |
+          **/compile_commands.json
+        key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ github.sha }}
+
+  static-checks:
+    runs-on: ${{ matrix.os }}
+    if: always()
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04]
+        compiler: [gcc]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install packages
+      run: |
+        sudo apt-get update -q -y
+        sudo apt-get install -y cppcheck
+    - uses: actions/cache@v2
+      id: restore-compile-commands
+      with:
+        path: |
+          **/compile_commands.json
+        key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ github.sha }}
+    - name: Run cppcheck for genprotimg
+      run: |
+        pushd genprotimg
+        pushd src
+        cppcheck --project=compile_commands.json --enable=all -j$(nproc) --force .
+        popd
+        popd
+    - name: Run cppcheck for genprotimg boot loader
+      if: always()
+      run: |
+        pushd genprotimg
+        pushd boot
+        cppcheck --project=compile_commands.json --enable=all -j$(nproc) --force .
+        popd
+        popd
+
+  build-openssl:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        openssl-version: [1.1.0l, 3.0.1]
+        libcurl-version: [7.81.0]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install requirements
+      run: |
+        sudo apt-get update -q -y
+        sudo apt-get install -y wget m4 bc pkg-config
+        sudo apt-get install -y libglib2.0-dev
+    - name: Set up environment variables
+      run: |
+        prefix_ssl=$(realpath ~/openssl)
+        openssldir=$prefix_ssl
+        ssl_path=$prefix_ssl
+
+        prefix_curl=$(realpath ~/libcurl)
+
+        # Store paths for OpenSSL
+        echo "prefix_ssl=$prefix_ssl" >> $GITHUB_ENV
+        echo "openssldir=$openssldir" >> $GITHUB_ENV
+        echo "ssl_path=$ssl_path" >> $GITHUB_ENV
+        if [[ "${{ matrix.openssl-version }}" == '1.1.'* ]]; then
+          echo "pkg_config_path_ssl=$openssldir/lib/pkgconfig" >> $GITHUB_ENV
+        else
+          echo "pkg_config_path_ssl=$openssldir/lib64/pkgconfig" >> $GITHUB_ENV
+        fi
+
+        # Store paths for libcurl
+        echo "prefix_curl=$prefix_curl" >> $GITHUB_ENV
+        echo "pkg_config_path_curl=$prefix_curl/lib/pkgconfig" >> $GITHUB_ENV
+
+    - name: Cache OpenSSL
+      id: cache-openssl
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.prefix_ssl }}
+        key: openssl-${{ matrix.openssl-version }}
+    - name: Download OpenSSL source, extract it, and prepare env variables
+      if: steps.cache-openssl.outputs.cache-hit != 'true'
+      run: |
+        filename=openssl-${{ matrix.openssl-version }}.tar.gz
+        wget https://www.openssl.org/source/$filename
+        tar xzf "$filename"
+
+        # Store `source_path` for the next step
+        echo "source_path=$(realpath "$(basename "$filename" .tar.gz)")" >> $GITHUB_ENV
+    - name: Configure, build, and install OpenSSL
+      if: steps.cache-openssl.outputs.cache-hit != 'true'
+      run: |
+        pushd "${{ env.source_path }}"
+        mkdir build
+        pushd build
+        ../config --prefix="${{ env.prefix_ssl }}" --openssldir="${{ env.openssldir }}" shared zlib
+        make -j
+        if [[ "${{ matrix.openssl-version }}" == '1.1.'* ]]; then
+          # parallel install is broken
+          make install
+        else
+          make install -j
+        fi
+        popd
+        popd
+    - name: Cache OpenSSL
+      if: steps.cache-openssl.outputs.cache-hit != 'true'
+      id: cache-openssl2
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.prefix_ssl }}
+        key: openssl-${{ matrix.openssl-version }}
+
+    - name: Cache libcurl
+      id: cache-libcurl
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.prefix_curl }}
+        key: libcurl-${{ matrix.libcurl-version }}-openssl-${{ matrix.openssl-version }}
+    - name: Download libcurl source, extract it, and prepare env variables
+      if: steps.cache-libcurl.outputs.cache-hit != 'true'
+      run: |
+        filename=curl-${{ matrix.libcurl-version }}.tar.gz
+        wget https://curl.se/download/$filename
+        tar xzf "$filename"
+
+        # Store `source_path` for the next step
+        echo "source_path_curl=$(realpath "$(basename "$filename" .tar.gz)")" >> $GITHUB_ENV
+    - name: Configure, build, and install libcurl
+      if: steps.cache-libcurl.outputs.cache-hit != 'true'
+      run: |
+        pushd "${{ env.source_path_curl }}"
+        mkdir build
+        pushd build
+        PKG_CONFIG_PATH="${{ env.pkg_config_path_ssl }}" ../configure --with-openssl --prefix="${{ env.prefix_curl }}"
+        make -j
+        make install -j
+        popd
+        popd
+    - name: Cache libcurl
+      if: steps.cache-libcurl.outputs.cache-hit != 'true'
+      id: cache-libcurl2
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.prefix_curl }}
+        key: libcurl-${{ matrix.libcurl-version }}-openssl-${{ matrix.openssl-version }}
+
+    - name: Compile genprotimg using self-compiled OpenSSL
+      run: |
+        pushd genprotimg
+        export PKG_CONFIG_PATH="${{ env.pkg_config_path_ssl }}:${{ env.pkg_config_path_curl }}:$(pkg-config --variable pc_path pkg-config)"
+        export LD_LIBRARY_PATH="${{ env.pkg_config_path_ssl }}/.."
+        export SSL_PATH="${{ env.ssl_path }}"
+        echo $LD_LIBRARY_PATH
+        make -C src all -j V=1
+        popd
+
+
+  valgrind:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04]
+        compiler: [gcc]
+    steps:
+    - name: Install packages
+      run: |
+        sudo apt-get update -q -y
+        sudo apt-get install -y gcc-s390x-linux-gnu gcc-s390x-linux-gnu
+        sudo apt-get install -y libssl-dev libglib2.0-dev libcurl4-openssl-dev
+        sudo apt-get install -y valgrind
+    - uses: actions/checkout@v2
+    - name: make
+      run: |
+        pushd genprotimg
+        # cross-compile boot loader
+        pushd boot
+        make all -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
+        popd
+        # compile genprotimg
+        pushd src
+        make all -j D=1 CC="${{ matrix.compiler }}" LINK="${{ matrix.compiler }}"
+        popd
+        popd
+    - name: Install genprotimg
+      run: |
+        pushd genprotimg
+        pushd boot
+        sudo make install -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
+        popd
+        sudo make install -j
+        popd
+    - name: Check genprotimg for memory leaks, etc.
+      run: |
+        openssl req -nodes -x509 -newkey ec  -subj "/C=NA/ST=NA/L=NA/O=NA/OU=DevOps/CN=www.example.com/emailAddress=dev@example.com" -pkeyopt ec_paramgen_curve:secp521r1 -keyout key.pem -out cert.pem -sha512 -days 1
+        printf '%s' 'root=/dev/mapper/test SOME OTHER VALUES' > parmfile
+        sudo valgrind genprotimg -k cert.pem -i "/boot/vmlinuz-$(uname -r)" -r "/boot/initrd.img-$(uname -r)" -p parmfile -o test --no-verify -V
+        sudo rm -f -- parmfile test
