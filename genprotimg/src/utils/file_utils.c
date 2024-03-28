@@ -222,7 +222,7 @@ gint pad_file_right(const gchar *path_out, const gchar *path_in, gsize *size_out
 		*size_out += num_bytes_written;
 	} while (num_bytes_read == padding);
 
-	g_assert(num_bytes_written == ALIGN(num_bytes_read, padding));
+	g_assert(*size_out == ALIGN(size_in, padding));
 
 	ret = 0;
 err:
