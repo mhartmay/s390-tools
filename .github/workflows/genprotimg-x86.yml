@@ -34,6 +34,7 @@ jobs:
         esac
     - name: make
       run: |
+        export W=1 ENABLE_WERROR=1 V=1
         pushd genprotimg
         # cross-compile boot loader
         pushd boot
@@ -199,6 +200,7 @@ jobs:
 
     - name: Compile genprotimg using self-compiled OpenSSL
       run: |
+        export W=1 ENABLE_WERROR=1 V=1
         pushd genprotimg
         export PKG_CONFIG_PATH="${{ env.pkg_config_path_ssl }}:${{ env.pkg_config_path_curl }}:$(pkg-config --variable pc_path pkg-config)"
         export LD_LIBRARY_PATH="${{ env.pkg_config_path_ssl }}/.."
@@ -225,6 +227,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: make
       run: |
+        export W=1 ENABLE_WERROR=1 V=1
         pushd genprotimg
         # cross-compile boot loader
         pushd boot
@@ -237,6 +240,7 @@ jobs:
         popd
     - name: Install genprotimg
       run: |
+        export W=1 ENABLE_WERROR=1 V=1
         pushd genprotimg
         pushd boot
         sudo make install -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
