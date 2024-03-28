@@ -17,7 +17,7 @@ WARNINGS := -Wall -Wextra -Wshadow \
 	-Wcast-align -Wwrite-strings -Wmissing-prototypes \
 	-Wmissing-declarations -Wredundant-decls -Wnested-externs \
 	-Wno-long-long -Wuninitialized -Wconversion -Wstrict-prototypes \
-	-Wpointer-arith -Wno-error=inline \
+	-Wpointer-arith -Wno-error=inline $(WNO_ERROR_UNUSED_COMMAND_LINE) \
 	$(NULL)
 
 $(bin_PROGRAM)_SRCS := $(bin_PROGRAM).c pv/pv_stage3.c pv/pv_image.c \

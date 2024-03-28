@@ -345,6 +345,12 @@ else
 	NO_PIE_LDFLAGS :=
 endif
 
+ifneq '' '$(findstring clang,$(CC))'
+      WNO_ERROR_UNUSED_COMMAND_LINE := -Wno-error=unused-command-line-argument
+else
+      WNO_ERROR_UNUSED_COMMAND_LINE :=
+endif
+
 # Overwrite implicit makefile rules for having nice compile output
 %.o: %.c
 ifeq ("${C}","1")
