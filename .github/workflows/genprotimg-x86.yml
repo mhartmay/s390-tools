@@ -34,15 +34,21 @@ jobs:
         esac
     - name: make
       run: |
+        if bear --help | grep -q '\[--verbose\] --'; then
+          bear_cmd=(bear --)
+        else
+          bear_cmd=(bear)
+        fi
         export W=1 ENABLE_WERROR=1 V=1
         pushd genprotimg
         # cross-compile boot loader
         pushd boot
-        bear make all -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
+
+        "${bear_cmd[@]}" make all -j HOST_ARCH=s390x CROSS_COMPILE=s390x-linux-gnu-
         popd
         # compile genprotimg
         pushd src
-        bear make all -j V=1 CC="${{ matrix.compiler }}" LINK="${{ matrix.compiler }}"
+        "${bear_cmd[@]}" make all -j V=1 CC="${{ matrix.compiler }}" LINK="${{ matrix.compiler }}"
         popd
         popd
     - uses: actions/cache@v2
